@@ -166,7 +166,6 @@ class Cipher {
         });
     }
 
-
     /**
      * Gets session data from a JWT.
      * @param {string} JWTtoken - The JWT to get session data from.
