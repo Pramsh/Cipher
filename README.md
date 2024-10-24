@@ -4,11 +4,7 @@ This `Cipher` class provides various cryptographic functionalities using Node.js
 
 ## Installation
 
-To use this class, ensure you have Node.js installed and include the `crypto` module.
-
-```bash
-npm install
-```
+To use this class, ensure you have Node.js installed.
 
 ## Usage
 
