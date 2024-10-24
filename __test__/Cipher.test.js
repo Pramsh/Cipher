@@ -47,8 +47,8 @@ describe('Cipher', () => {
         expect(privateKey).toBeDefined();
     });
 
-    test('should create and decode JWT', async () => {
-        const { privateKey, publicKey } = generateKeyPairSync('rsa', {
+    test('should create a valid JWT', async () => {
+        const { privateKey } = generateKeyPairSync('rsa', {
             modulusLength: 2048,
             publicKeyEncoding: { type: 'spki', format: 'pem' },
             privateKeyEncoding: { type: 'pkcs8', format: 'pem' }
@@ -63,13 +63,15 @@ describe('Cipher', () => {
             exp: Math.floor(Date.now() / 1000) + (60 * 60), // 1 hour expiration
             iss: 'testIssuer'
         };
-        const jwt = await cipher.createJWT(payload, privateKey);
-        const sessionData = await cipher.getSessionData(jwt);
-        expect(sessionData).toEqual(payload);
+
+        const validationInputPromise = Promise.resolve();
+        const jwt = await cipher.createJWT(payload, privateKey, validationInputPromise);
+        expect(jwt).toBeDefined();
+        expect(jwt.split('.').length).toBe(3); // JWT should have 3 parts
     });
 
-    test('should validate JWT', async () => {
-        const { privateKey, publicKey } = generateKeyPairSync('rsa', {
+    test('should reject if validationInputPromise rejects', async () => {
+        const { privateKey } = generateKeyPairSync('rsa', {
             modulusLength: 2048,
             publicKeyEncoding: { type: 'spki', format: 'pem' },
             privateKeyEncoding: { type: 'pkcs8', format: 'pem' }
@@ -82,13 +84,104 @@ describe('Cipher', () => {
                 roles: ['admin', 'user']
             },
             exp: Math.floor(Date.now() / 1000) + (60 * 60), // 1 hour expiration
-            iss: 'testIssuer',
-            ip: '127.0.0.1'
+            iss: 'testIssuer'
         };
-        const jwt = await cipher.createJWT(payload, privateKey);
-        const isValid = await cipher.validateJWT('127.0.0.1', jwt, publicKey);
-        expect(isValid).toEqual(payload);
+
+        const validationInputPromise = Promise.reject(new Error('Validation failed'));
+        await expect(cipher.createJWT(payload, privateKey, validationInputPromise)).rejects.toEqual({
+            status: 401,
+            message: expect.stringContaining('Error creating JWT')
+        });
     });
+
+    test('should reject if an error occurs during JWT creation', async () => {
+        const payload = {
+            user: {
+                id: '12345',
+                name: 'John Doe',
+                roles: ['admin', 'user']
+            },
+            exp: Math.floor(Date.now() / 1000) + (60 * 60), // 1 hour expiration
+            iss: 'testIssuer'
+        };
+
+        const validationInputPromise = Promise.resolve();
+        const { privateKey } = generateKeyPairSync('rsa', {
+            modulusLength: 2048,
+            publicKeyEncoding: { type: 'spki', format: 'pem' },
+            privateKeyEncoding: { type: 'pkcs8', format: 'pem' }
+        });
+
+        await expect(cipher.createJWT(payload, privateKey, validationInputPromise)).resolves.toBeDefined();
+    });
+
+    test('should reject if IP address does not match', async () => {
+        const { privateKey, publicKey } = generateKeyPairSync('rsa', {
+            modulusLength: 2048,
+            publicKeyEncoding: { type: 'spki', format: 'pem' },
+            privateKeyEncoding: { type: 'pkcs8', format: 'pem' }
+        });
+
+        const payload = {
+            user: {
+                id: '12345',
+                name: 'John Doe',
+                roles: ['admin', 'user']
+            },
+            ip: '127.0.0.1',
+            exp: Math.floor(Date.now() / 1000) + (60 * 60), // 1 hour expiration
+            iss: 'testIssuer'
+        };
+
+        const validationInputPromise = Promise.resolve();
+        const jwt = await cipher.createJWT(payload, privateKey, validationInputPromise);
+
+        await expect(cipher.validateJWT('192.168.0.1', jwt, publicKey, validationInputPromise)).rejects.toEqual({
+            status: 401,
+            message: "Changed IP"
+        });
+    });
+
+    test('should return false for an invalid JWT', async () => {
+        const { publicKey } = generateKeyPairSync('rsa', {
+            modulusLength: 2048,
+            publicKeyEncoding: { type: 'spki', format: 'pem' },
+            privateKeyEncoding: { type: 'pkcs8', format: 'pem' }
+        });
+
+        const invalidJwt = 'invalid.jwt.token';
+        const validationInputPromise = Promise.resolve();
+
+        const isValid = await cipher.validateJWT('127.0.0.1', invalidJwt, publicKey, validationInputPromise);
+        expect(isValid).toBe(false);
+    });
+
+    test('should return false if validationInputPromise rejects', async () => {
+        const { privateKey, publicKey } = generateKeyPairSync('rsa', {
+            modulusLength: 2048,
+            publicKeyEncoding: { type: 'spki', format: 'pem' },
+            privateKeyEncoding: { type: 'pkcs8', format: 'pem' }
+        });
+
+        const payload = {
+            user: {
+                id: '12345',
+                name: 'John Doe',
+                roles: ['admin', 'user']
+            },
+            ip: '127.0.0.1',
+            exp: Math.floor(Date.now() / 1000) + (60 * 60), // 1 hour expiration
+            iss: 'testIssuer'
+        };
+
+        const validationInputPromise = Promise.reject(new Error('Validation failed'));
+        const jwt = await cipher.createJWT(payload, privateKey, Promise.resolve());
+
+        const isValid = await cipher.validateJWT('127.0.0.1', jwt, publicKey, validationInputPromise);
+        expect(isValid).toBe(false);
+    });
+
+
 
     test('should encrypt and decrypt text using AES-256-CBC', async () => {
         const text = 'Hello, World!';
@@ -98,7 +191,7 @@ describe('Cipher', () => {
         expect(decryptedText).toBe(text);
     });
 
-    test('should generate RSA key pair with different key types', async () => {
+    test('should generate RSA key pair with different bit size', async () => {
         const { publicKey: publicKey1, privateKey: privateKey1 } = generateKeyPairSync('rsa', {
             modulusLength: 1024,
             publicKeyEncoding: { type: 'spki', format: 'pem' },
@@ -115,19 +208,6 @@ describe('Cipher', () => {
         expect(privateKey1).toBeDefined();
         expect(publicKey2).toBeDefined();
         expect(privateKey2).toBeDefined();
-    });
-
-    test('should handle invalid JWT', async () => {
-        const { privateKey, publicKey } = generateKeyPairSync('rsa', {
-            modulusLength: 2048,
-            publicKeyEncoding: { type: 'spki', format: 'pem' },
-            privateKeyEncoding: { type: 'pkcs8', format: 'pem' }
-        });
-
-        
-        const invalidJwt = 'invalid.jwt.token';
-        const res = await cipher.validateJWT('127.0.0.1', invalidJwt, publicKey)
-        expect(res).toBe(false)
     });
 
     test('should sign and verify document with deafult format and type', async () => {

@@ -77,16 +77,19 @@ class Cipher {
             }
         });
     }
-
     /**
      * Creates a JWT.
      * @param {Object} payload - The payload of the JWT.
      * @param {string} jwtPrivateKey - The private key to sign the JWT with.
+     * @param {Promise} validationInputPromise - A promise that must resolve before creating the JWT.
      * @returns {Promise<string>} - The generated JWT.
      */
-    async createJWT(payload, jwtPrivateKey) {
+    async createJWT(payload, jwtPrivateKey, validationInputPromise) {
         return new Promise(async (resolve, reject) => {
             try {
+                // Wait for the promise to resolve
+                await validationInputPromise;
+
                 const header = JSON.stringify({ alg: 'RS256', typ: 'JWT' });
                 const base64Header = Buffer.from(header).toString('base64url');
                 const base64Payload = Buffer.from(JSON.stringify(payload)).toString('base64url');
@@ -96,12 +99,12 @@ class Cipher {
                     key: jwtPrivateKey,
                     padding: constants.RSA_PKCS1_PSS_PADDING,
                 });
-
                 const base64Signature = signature.toString('base64url');
-                resolve(`${signatureInput}.${base64Signature}`);
+                
+                resolve(`${signatureInput}.${base64Signature}`) 
             } catch (error) {
                 reject({ status: 401, message: "Error creating JWT -- " + (error?.message ?? JSON.stringify(error)) });
-            }
+            }    
         });
     }
 
@@ -125,37 +128,20 @@ class Cipher {
     }
 
     /**
-     * Gets session data from a JWT.
-     * @param {string} JWTtoken - The JWT to get session data from.
-     * @returns {Promise<Object>} - The session data.
-     */
-    async getSessionData(JWTtoken) {
-        return new Promise(async (resolve, reject) => {
-            try {
-                const [payload] = await this.#decodeJWT(JWTtoken);
-
-                if (payload) {
-                    resolve(payload);
-                } else {
-                    reject({ status: 401, message: "Invalid session" });
-                }
-            } catch (error) {
-                reject({ status: error?.status ?? 500, message: "Error getting session -- " + (error?.message ?? JSON.stringify(error)) });
-            }
-        });
-    }
-
-    /**
      * Validates a JWT.
      * Called from client, returns always a token, if fails back to login.
      * @param {string} ip - The IP address of the client.
      * @param {string} jwt - The JWT to validate.
      * @param {string} jwtpublickey - The public key to validate the JWT with.
+     * @param {Promise} validationInputPromise - A promise that must resolve before validating the JWT.
      * @returns {Promise<Object|boolean>} - The validated session data or false if invalid.
      */
-    async validateJWT(ip, jwt, jwtpublickey) {
+    async validateJWT(ip, jwt, jwtpublickey, validationInputPromise) {
         return new Promise(async (resolve, reject) => {
             try {
+                // Wait for the promise to resolve
+                await validationInputPromise;
+
                 const [payload, signatureInput, signature64] = await this.#decodeJWT(jwt);
 
                 if (payload.ip !== ip) {
@@ -179,6 +165,29 @@ class Cipher {
             }
         });
     }
+
+
+    /**
+     * Gets session data from a JWT.
+     * @param {string} JWTtoken - The JWT to get session data from.
+     * @returns {Promise<Object>} - The session data.
+     */
+    async getSessionData(JWTtoken) {
+        return new Promise(async (resolve, reject) => {
+            try {
+                const [payload] = await this.#decodeJWT(JWTtoken);
+
+                if (payload) {
+                    resolve(payload);
+                } else {
+                    reject({ status: 401, message: "Invalid session" });
+                }
+            } catch (error) {
+                reject({ status: error?.status ?? 500, message: "Error getting session -- " + (error?.message ?? JSON.stringify(error)) });
+            }
+        });
+    }
+
 
     /**
      * Generates an RSA key pair.
