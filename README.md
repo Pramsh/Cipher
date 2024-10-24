@@ -46,16 +46,15 @@ cipher.CheckClientHeaders(clientAppKey, clientAppToken)
     .catch(error => console.error(error));
 ```
 
-#### `createJWT(payload, jwtPrivateKey)`
+#### `createJWT(payload, jwtPrivateKey, [validationInputPromise])`
 
-Creates a JWT with the given payload and private key.
+Creates a JWT with the given payload and private key. Optionally, a validation promise can be provided.
 
 ```javascript
-cipher.createJWT(payload, jwtPrivateKey)
+cipher.createJWT(payload, jwtPrivateKey, validationInputPromise)
     .then(token => console.log(token))
     .catch(error => console.error(error));
 ```
-
 #### `getSessionData(JWTtoken)`
 
 Gets session data from a JWT.
@@ -71,7 +70,7 @@ cipher.getSessionData(JWTtoken)
 Validates a JWT with the given IP and public key.
 
 ```javascript
-cipher.validateJWT(ip, jwt, jwtpublickey)
+cipher.validateJWT(ip, jwt, jwtpublickey, validationInputPromise)
     .then(isValid => console.log(isValid))
     .catch(error => console.error(error));
 ```
